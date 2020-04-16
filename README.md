@@ -5,30 +5,31 @@ format.
 
 For more on Cogmind, see https://www.gridsagegames.com/cogmind/
 
+This is a fan project and not sponsored by or affiliated with Grid Sage
+Games / Josh Ge. Any opinions represented here are my own.
+
 I've done this as a fun way to learn Clojure; don't expect too much.
 
 ## Usage
 
 What you'll need:
 
-1. [Leinengen](https://leiningen.org/#install)
-2. The protobuf definition from https://github.com/Kyzrati/cogmind-scoresheet
-copied into resources/protobuf/scoresheet.proto
+1. protoc
+2. [Leinengen](https://leiningen.org/#install)
 3. Score data (you'll have to ask Kyzrati for this)
 
-Compile the protobuf definition with:
+Set the path to protoc in project.clj if it's not `/usr/bin/protoc`.
 
-```
-protoc -I resources/proto \
-	resources/proto/scoresheet.proto \
-	resources/proto/archived_scoresheet.proto \
-	 --java_out .
-```
-
-Then run it:
+Then run main:
 
 ```
 lein run -- -d score-data-directory leaders 100
+```
+
+Or run the REPL and experiment.
+
+```
+lein repl
 ```
 
 ## Copyright
