@@ -68,7 +68,6 @@
       (protobuf/bytes-> protodef all-bytes)
       (catch Exception e (str "caught exception on " f ": " (.getMessage e))))))
 
-(defn safe-pos? [x] (and (number? x) (pos? x)))
 (defn leaderboard-data [pb]
   (let
     [{scores :scoresheet} pb
@@ -99,8 +98,8 @@
    :final-depth (if win
                   0
                   (-> scores :route :entries last :location :depth))
-   :boss-kills (+ (if (safe-pos? destroyed-mainc) 1 0)
-                  (if (safe-pos? destroyed-architect) 1 0))
+   :boss-kills (+ (if destroyed-mainc 1 0)
+                  (if destroyed-architect 1 0))
    :regions-visited (-> scores :performance :regions-visited :count)
    :date (-> scores :header :run-end-date)}))
 
