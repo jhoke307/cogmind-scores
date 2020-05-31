@@ -34,10 +34,9 @@
         (for [[name num desc] (enum-info enum-desc)]
           [(if (= 0 num) nil (snake-case-kw name)) desc])))
 
-(defn scoresheet-name-map [enum-name]
-  (enum-name-map
-    (eval `(. ~(symbol (str "Protobuf.ScoresheetOuterClass$" enum-name))
-              getDescriptor))))
+(defmacro scoresheet-name-map [enum-name]
+  `(enum-name-map (. ~(symbol (str "Protobuf.ScoresheetOuterClass$" enum-name))
+                     getDescriptor)))
 
 (def map-names (scoresheet-name-map "MapType"))
 (def difficulty-names (scoresheet-name-map "DifficultyType"))
@@ -53,7 +52,6 @@
    :dc "DC"
    :rif "RIF"
    :crm "CRM"})
-
 
 (defn safe-pos? [x] (and (number? x) (pos? x)))
 (defn leaderboard-data [pb]
