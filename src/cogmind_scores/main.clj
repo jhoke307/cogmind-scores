@@ -28,7 +28,7 @@
   ([options] (show-leaders options 10))
   ([options num-entries]
    (if (empty? (:data options))
-     (show-errors ["Must specify --data directory."])
+     (show-errors ["Must specify --data directory containing scores."])
      (let [data-dir (:data options)
            score-data (impl/read-data data-dir)]
        (impl/render-group-scores score-data

@@ -6,16 +6,9 @@
 (require '[protobuf.core :as protobuf])
 (import '(Protobuf ScoresheetOuterClass))
 (import '(Protobuf ArchivedScoresheet))
+(import 'clojure.lang.Reflector)
 
-(def protodef (protobuf/create Protobuf.ArchivedScoresheet$ArchivedPostScoresheetRequest))
-(defn read-scores [f]
-  (let [all-bytes (java.nio.file.Files/readAllBytes
-                    (.toPath
-                      (as-file f)))]
-    (try
-      (protobuf/bytes-> protodef all-bytes)
-      (catch Exception e (str "caught exception on " f ": " (.getMessage e))))))
-
+; utilities
 (defn snake-case-kw [str]
   (-> str
       (s/replace #"_" "-")
@@ -29,15 +22,27 @@
          #(.. % getOptions (getExtension Protobuf.ScoresheetOuterClass/enumDisplayName)))
        (. enum-desc getValues)))
 
-(defn enum-name-map [enum-desc]
+(defn enum-desc-name-map [enum-desc]
   (into {}
         (for [[name num desc] (enum-info enum-desc)]
           [(if (= 0 num) nil (snake-case-kw name)) desc])))
 
-(defmacro scoresheet-name-map [enum-name]
-  `(enum-name-map (. ~(symbol (str "Protobuf.ScoresheetOuterClass$" enum-name))
-                     getDescriptor)))
+(defn enum-desc [container enum-name]
+  (let [qualified-name (str container "$" enum-name)
+        klass (resolve (symbol qualified-name))
+        method "getDescriptor"
+        args (into-array [])]
+    (Reflector/invokeStaticMethod klass method args)))
 
+(defn scoresheet-name-map
+  "Given an enum-name, return a map from the keyword value that will appear
+  in the parsed protobuf's mapping to the human readable string provided in
+  the protobuf definition."
+  [enum-name]
+  (-> (enum-desc "Protobuf.ScoresheetOuterClass" enum-name)
+      enum-desc-name-map))
+
+; Cache maps for names
 (def map-names (scoresheet-name-map "MapType"))
 (def difficulty-names (scoresheet-name-map "DifficultyType"))
 (def special-mode-names (scoresheet-name-map "SpecialModeType"))
@@ -52,6 +57,16 @@
    :dc "DC"
    :rif "RIF"
    :crm "CRM"})
+
+; protobuf loading
+(def protodef (protobuf/create Protobuf.ArchivedScoresheet$ArchivedPostScoresheetRequest))
+(defn read-scores [f]
+  (let [all-bytes (java.nio.file.Files/readAllBytes
+                    (.toPath
+                      (as-file f)))]
+    (try
+      (protobuf/bytes-> protodef all-bytes)
+      (catch Exception e (str "caught exception on " f ": " (.getMessage e))))))
 
 (defn safe-pos? [x] (and (number? x) (pos? x)))
 (defn leaderboard-data [pb]
