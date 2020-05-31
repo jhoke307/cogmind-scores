@@ -42,6 +42,9 @@
   (-> (enum-desc "Protobuf.ScoresheetOuterClass" enum-name)
       enum-desc-name-map))
 
+; Data
+(def ^:private default-num-scores 10)
+
 ; Cache maps for names
 (def map-names (scoresheet-name-map "MapType"))
 (def difficulty-names (scoresheet-name-map "DifficultyType"))
@@ -68,7 +71,14 @@
       (protobuf/bytes-> protodef all-bytes)
       (catch Exception e (str "caught exception on " f ": " (.getMessage e))))))
 
-(defn leaderboard-data [pb]
+; parsing
+(defn scoresheet-url [id]
+   (str "https://cogmind-api.gridsagegames.com/scoresheets/" id))
+
+(defn leaderboard-data
+  "Parse the loaded protobuf for a scoresheet into a map containing just what
+  we care about for analysis purposes."
+  [pb]
   (let
     [{scores :scoresheet} pb
      bonus (-> scores :bonus)
@@ -77,7 +87,7 @@
      win (-> scores :header :win)]
   {:player-id (-> scores :meta :player-id),
    :player-name (-> scores :header :player-name),
-   :link (str "https://cogmind-api.gridsagegames.com/scoresheets/" (-> pb :bucket-name)),
+   :link (scoresheet-url (-> pb :bucket-name)),
    :win win,
    ; :win-type (-> scores :game :win-type),
    :final-location (-> scores :cogmind :location)
@@ -103,54 +113,47 @@
    :regions-visited (-> scores :performance :regions-visited :count)
    :date (-> scores :header :run-end-date)}))
 
+; Render a leaderboard entry
 (defn render-location [{mapkey :map depth :depth}]
   (str depth "/" (get map-names mapkey mapkey)))
 
-(defn render-entry [data score-keyfn]
+(defn render-entry
+  "Render a single score entry into a leaderboard line."
+  [data score-keyfn]
   (str (:player-name data) " "
        (if (:win data) "Ascended" (render-location (:final-location data)))
        (apply str (repeat (:boss-kills data) \+)) " "
        "[url=" (:link data) "]"
-       ; (:score data) "[/url] "
        (score-keyfn data) "[/url] "
        (s/join ", "
                (apply conj
                  (:challenges data)
                  (map mutation-names (:mutations data))))))
 
+; leaderboard generation
 
 ; Basic plan:
-; Read all scores into a vector?
+; Read all scores into a sequence
 ; Partition by difficulty, special modes
 ; Sort - pick highest for each user in each category (high scores /
 ; furthest area reached)
-; (group-by (juxt :player-id :special-mode) all-leaderboard-data)
 
-
-(defn process-score-data [f dir]
+; To avoid excessive memory usage, we avoid loading all the protobufs at
+; once. We stream over them and process into leaderboard-data as we load
+; them.
+(defn process-score-data
+  "Load the protobuf files from the given directory into a sequence with
+  the given function applied."
+  [f dir]
   (let [files (filter #(.isFile %) (file-seq (as-file dir)))]
     (map #(f (read-scores %)) files)))
 
-(defn read-score-data [dir]
-  (let [files (filter #(.isFile %) (file-seq (as-file dir)))]
-    (map read-scores files)))
+(defn read-data
+  "Load the protobuf files from the given directory into a sequence of
+  leaderboard-data maps."
+  [dir]
+  (process-score-data leaderboard-data dir))
 
-(defn read-data [dir]
-  (let [files (filter #(.isFile %) (file-seq (as-file dir)))]
-    (map #(leaderboard-data (read-scores %)) files)))
-
-(def all-leaderboard-data
-  (let [files (filter #(.isFile %) (file-seq (as-file ".")))]
-    (map #(leaderboard-data (read-scores %)) files)))
-
-
-(def ^:private default-num-scores 10)
-
-;(pprint
-;  (take 10
-;        (sort-by #(or (:score %) 0)
-;                 (for [[id scores] player-groups]
-;                   (apply max-key #(or (:score %) 0) scores))
 (defn group-scores [data]
   (group-by (juxt :difficulty
                   :special-mode
@@ -183,7 +186,19 @@
              (compare [achal amode adiff] [bchal bmode bdiff]))
            group-names))
 
+(defn render-score-data
+  "Render the given leaderboard-data into a single list of leaderboard entries.
+  It must be sorted in the desired order already."
+  ([data] (render-score-data data score-keyfn))
+  ([data keyfn]
+   (s/join "\n"
+           (map-indexed #(str (inc %1) ". " %2)
+                        (map #(render-entry % keyfn) data)))))
+
 (defn render-group-scores
+  "Render the given leaderboard-data into a set of leaderboard rankings
+  grouped by group-scores and sorted by scores extracted by the given keyfn,
+  or score-keyfn by default."
   ([data] (render-group-scores data score-keyfn))
   ([data keyfn] (render-group-scores data default-num-scores keyfn))
   ([data num-scores keyfn]
@@ -193,25 +208,16 @@
        (let [scores (get grouped-score-map group-name)]
          (println (render-group-name group-name))
          (println
-           (s/join "\n"
-                   (map-indexed #(str (inc %1) ". " %2)
-                                (map #(render-entry % keyfn)
-                                     (take num-scores
-                                           (top-scores scores keyfn))))))
+           (render-score-data
+             (take num-scores
+                   (top-scores scores keyfn))))
          (println))))))
-
-; TODO Use this in above
-(defn render-score-data
-  ([data] (render-score-data data score-keyfn))
-  ([data keyfn]
-   (s/join "\n"
-           (map-indexed #(str (inc %1) ". " %2)
-                        (map #(render-entry % keyfn) data)))))
 
 ; (def test-dir "cogmind-scores-20200108T070002")
 ; (-> (process-score-data leaderboard-data test-dir)
 ; render-group-scores)
 
+; Scoresheet statistics
 (defn- get-score [scoresheet]
   (get-in scoresheet [:scoresheet :performance :total-score]))
 
